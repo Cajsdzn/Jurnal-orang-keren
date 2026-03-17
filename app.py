@@ -1,7 +1,10 @@
 import streamlit as st
 import pandas as pd
+from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="My Journal", page_icon="📝")
 st.title("📝 Jurnal 3 Quest Saya")
+conn = st.connection("gsheets", type=GSheetsConnection)
+df = conn.read(ttl="0")
 st.subheader("Quest Hari Ini:")
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -16,35 +19,22 @@ total_selesai = q1 + q2 + q3
 skor_hari_ini = (total_selesai / 3) * 100
 if st.button("Simpan progress"):
     import datetime
-    hari_ini = str (datetime.date.today())
-    sudah_isi = False
-    try:
-        with open("data.csv", "r") as f:
-            baris_data = f.readlines()
-            for baris in baris_data:
-                if baris.startswith(hari_ini):
-                    sudah_isi = True
-    except FileNotFoundError :
-        sudah_isi = false
-
-    if sudah_isi:
-        st.warning("Kamu sudah mengisi jurnal hari ini!")
+    hari_ini = datetime.date.today().strftime('%Y-%m-%d')
+    if hari_ini in df["Tanggal"].astype(str).values:
+            st.warning("Kamu sudah mengisi jurnal hari ini!")
     else:
-        skor_mentah = (q1 + q2 + q3) / 3 * 100
-        skor_hari_ini = round(skor_mentah)
-        teks_simpan = f"{hari_ini}, {skor_hari_ini}, {catatan}\n"
-        with open("data.csv", "a") as f:
-            f.write(teks_simpan)
-        st.success(f"Saved! skor kamu hari ini: {int(skor_hari_ini)}%")
-        st.balloons()
+        skor_akhir = round(( (q1 + q2 + q3) / 3 ) * 100)
+        new_row = pd.DataFrame([{"Tanggal": hari_ini, "Skor": skor_akhir, "Catatan": catatan}])
+        df_update = pd.concat([df, new_row], ignore_index=True)
+        st.success(f"Saved! Skor kamu hari ini: {skor_akhir}%")
+        conn.update(data=df_update)
+        st.balloons
+        st.rerun()
 st.divider()
 st.subheader("Grafik Progress Kamu")
 try:
-    df = pd.read_csv("data.csv", names=["Tanggal", "Skor", "Catatan"],quotechar= '"', quoting=1)
-    df["Skor"] = pd.to_numeric(df["Skor"], errors='coerce'). fillna(0)
-    df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors='coerce')
-    df = df.dropna(subset=["Tanggal"])
-    df = df.sort_values("Tanggal")
+    df["Tanggal"] = pd.to_datetime(df["Tanggal"])
+    df["Skor"] = pd.to_numeric(df["Skor"])
     opsi_waktu = st.radio("Lihat Progress:",["Seminggu", "Sebulan", "6 Bulan", "1 Tahun", "Semua"], horizontal=True)
     hari_ini = pd.Timestamp.now().normalize()
     if opsi_waktu == "Seminggu":
@@ -76,4 +66,5 @@ try:
     st.dataframe(df_tabel,use_container_width=True)
 except Exception as e:
     st.error(f"Error:{e}")
+    st.info("Belum ada data nih, progress dulu sana!")}")
     st.info("Belum ada data nih, progress dulu sana!")

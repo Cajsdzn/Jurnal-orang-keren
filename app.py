@@ -67,4 +67,3 @@ try:
 except Exception as e:
     st.error(f"Error:{e}")
     st.info("Belum ada data nih, progress dulu sana!")}")
-    st.info("Belum ada data nih, progress dulu sana!")

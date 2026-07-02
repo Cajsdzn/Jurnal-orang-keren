@@ -5,49 +5,88 @@ import datetime
 
 # --- CONFIG & DECORATION ---
 st.set_page_config(page_title="My Journal", page_icon="📝")
-st.title("📝 Jurnal 3 Quest Saya")
+st.title("📝 Jurnal 6 Quest Saya")
 
 # --- DATABASE CONNECTION ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(ttl="0")
 
-# Memastikan kolom quest ada di DataFrame jika ini database baru
-for col in ["Olahraga", "Belajar", "Journaling"]:
+# Daftar 6 quest baru
+ALL_QUESTS = ["Olahraga", "Belajar", "Journaling", "Tidur", "Screen Time", "Pantangan"]
+
+# Memastikan semua kolom quest ada di DataFrame jika ini database baru
+for col in ALL_QUESTS:
     if col not in df.columns:
         df[col] = False
 
+# --- TIMEZONE CHECK (WIB / UTC+7) ---
+# Menggunakan timezone offset manual (+7 jam) agar aman di server mana pun
+jam_sekarang_wib = (datetime.datetime.utcnow() + datetime.timedelta(hours=7)).time()
+
+# Logika penguncian jam
+belajar_terkunci = jam_sekarang_wib >= datetime.time(20, 0)
+tidur_terkunci = jam_sekarang_wib >= datetime.time(22, 0)
+
 # --- INPUT FORM ---
 st.subheader("Quest Hari Ini:")
+
+# Info waktu sekarang untuk user
+st.caption(f"Waktu Sekarang (WIB): {jam_sekarang_wib.strftime('%H:%M')}")
+
+# Baris pertama (Quest Lama)
 col1, col2, col3 = st.columns(3)
 with col1:
     q1 = st.checkbox("🏃 Olahraga")
 with col2:
-    q2 = st.checkbox("📒 Belajar")
+    # Jika sudah lewat jam 20:00 WIB, checkbox akan di-disable
+    if belajar_terkunci:
+        st.info("🔒 Belajar (Terkunci)")
+        q2 = False
+    else:
+        q2 = st.checkbox("📒 Belajar")
 with col3:
-    q3 = st.checkbox("📖 journaling")
+    q3 = st.checkbox("📖 Journaling")
+
+# Baris kedua (Quest Baru)
+col4, col5, col6 = st.columns(3)
+with col4:
+    # Jika sudah lewat jam 22:00 WIB, checkbox akan di-disable
+    if tidur_terkunci:
+        st.info("🔒 Tidur (Terkunci)")
+        q4 = False
+    else:
+        q4 = st.checkbox("🛌 Tidur")
+with col5:
+    q5 = st.checkbox("📱 Screen Time")
+with col6:
+    q6 = st.checkbox("🛑 Pantangan")
 
 st.subheader("Log Hari Ini")
 catatan = st.text_area("Apa yang terjadi hari ini?", placeholder="Tulis kendala atau ceritamu...")
 
 # --- ACTION: SAVE PROGRESS ---
 if st.button("Simpan progress"):
-    hari_ini = datetime.date.today().strftime('%Y-%m-%d')
+    # Mengambil tanggal hari ini versi WIB
+    hari_ini = (datetime.datetime.utcnow() + datetime.timedelta(hours=7)).strftime('%Y-%m-%d')
     
     # Cek apakah hari ini sudah pernah isi
     if hari_ini in df["Tanggal"].astype(str).values:
         st.warning("Kamu sudah mengisi jurnal hari ini!")
     else:
-        # Hitung skor bulat
-        skor_akhir = round(((q1 + q2 + q3) / 3) * 100)
+        # Hitung skor bulat dibagi 6 quest
+        skor_akhir = round(((q1 + q2 + q3 + q4 + q5 + q6) / 6) * 100)
         
-        # Buat baris baru yang mencakup status masing-masing quest
+        # Buat baris baru mencakup semua 6 quest
         new_row = pd.DataFrame([{
             "Tanggal": hari_ini, 
             "Skor": skor_akhir, 
             "Catatan": catatan,
             "Olahraga": q1,
             "Belajar": q2,
-            "Journaling": q3
+            "Journaling": q3,
+            "Tidur": q4,
+            "Screen Time": q5,
+            "Pantangan": q6
         }])
         
         df_update = pd.concat([df, new_row], ignore_index=True)
@@ -96,10 +135,9 @@ try:
     df_tabel = df.copy().iloc[::-1]
     df_tabel["Tanggal"] = pd.to_datetime(df_tabel["Tanggal"]).dt.date
     
-    # Bagian perulangan FOR mapping (Sudah disesuaikan dengan angka 1 dan 0)
-    for quest in ["Olahraga", "Belajar", "Journaling"]:
+    # Looping mapping disesuaikan ke 6 quest
+    for quest in ALL_QUESTS:
         if quest in df_tabel.columns:
-            # Kita cek: kalau datanya 1, atau teks "1", atau True murni -> ✅ Selesai. Selain itu ❌ Belum.
             df_tabel[quest] = df_tabel[quest].apply(lambda x: "✅" if str(x).strip() == "1" or x == 1 or x is True else "❌")
             
     st.dataframe(df_tabel, use_container_width=True)
